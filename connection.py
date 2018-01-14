@@ -35,17 +35,8 @@ class Connection(object):
       messages by calling the functions upon this class instance.
     """
 
-    ATTRIBUTES = {
-        "socket": socket.socket,
-        "socket_lock": Lock,
-        "message_queue": Queue,
-        "separator": str
-    }
-
-    def __init__(self, address=None, sock=None, separator="+", lock=Lock(), queue=Queue()):
+    def __init__(self, sock=None, separator="+", lock=Lock(), queue=Queue()):
         """
-        Either address or sock must be provided, or both.
-        :param address: address tuple (address: str, port: int)
         :param sock: Socket object to operate with
         :param separator: UTF-8 character that is used to separate
             individual messages
@@ -54,28 +45,18 @@ class Connection(object):
         :param queue: Queue instance that is used as the message queue
         """
         # Perform argument checks
-        if not isinstance(address, tuple) or not isinstance(address[0], str) or not isinstance(address[1], int):
-            raise TypeError("address argument not a valid address tuple")
         if not isinstance(sock, socket.socket):
             raise TypeError("sock is not a valid socket")
         if not isinstance(separator, str) or len(separator) != 1:
             raise ValueError("separator is not a valid single character string")
-        if not isinstance(lock, Lock):
-            raise TypeError("lock is not a valid Lock instance")
         if not isinstance(queue, Queue):
             raise TypeError("queue is not a valid normal Queue")
-        if address is None and sock is None:
-            raise ValueError("address and sock cannot both be None")
 
         # Set attributes
         self.socket = sock if sock is not None else socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.separator = separator
         self.socket_lock = lock
         self.message_queue = queue
-
-        # Set-up the socket object
-        if sock is None:  # Address is not None and self.socket is not None
-            self.socket.connect(address)
 
     def send(self, message, error=False):
         """
@@ -90,10 +71,6 @@ class Connection(object):
         """
         if not isinstance(message, str):
             raise TypeError("Connection only supports str messages")
-        if not self._check_ready():
-            if error is True:
-                raise RuntimeError("Not all attributes set correctly")
-            return False
         # Lock the socket to ensure thread-safety
         self.socket_lock.acquire()
         try:
@@ -126,8 +103,6 @@ class Connection(object):
                     full message if the message is longer than the
                     buffer size
         """
-        if not self._check_ready():
-            raise RuntimeError("Not all attributes set correctly")
         self.socket_lock.acquire()
         self.socket.setblocking(block)
         self.socket.settimeout(timeout)
@@ -136,11 +111,11 @@ class Connection(object):
         while True:
             try:
                 message = self.socket.recv(buffer)
-                # Compare the last character to the separator
-                wait = message[-1] != self.separator.encode()[0]
                 # Message is empty, end of buffer
                 if message == b"":
                     break
+                # Compare the last character to the separator
+                wait = message[-1] != self.separator.encode()[0]
                 total += message
             # socket.error when non-blocking, timeout when blocking
             except (socket.error, socket.timeout):
@@ -169,26 +144,10 @@ class Connection(object):
         """
         Closes the Connection.
         """
-        if not self._check_ready():
-            raise RuntimeError("Not all attributes set correctly")
         self.socket_lock.acquire()
         if message is not None:
             self.send(message)
         self.socket.close()
         self.socket_lock.release()
-
-    def _check_ready(self):
-        """
-        Private class function to prevent the usage of a socket without
-        the proper attributes if the class was not initialized.
-        :raises: AttributeError if an attribute is not available
-        :raises: TypeError if an attribute is of the incorrect type
-        """
-        for attribute, attr_type in self.ATTRIBUTES.items():
-            if not hasattr(self, attribute):
-                raise AttributeError("Attribute {} is not set".format(attribute))
-            if not isinstance(getattr(self, attribute), attr_type):
-                raise TypeError("Attribute {} is not of {} type".format(attribute, attr_type))
-        return True
 
 
