@@ -165,6 +165,18 @@ class Connection(object):
         # To get a message, access message_queue
         return
 
+    def close(self, message=None):
+        """
+        Closes the Connection.
+        """
+        if not self._check_ready():
+            raise RuntimeError("Not all attributes set correctly")
+        self.socket_lock.acquire()
+        if message is not None:
+            self.send(message)
+        self.socket.close()
+        self.socket_lock.release()
+
     def _check_ready(self):
         """
         Private class function to prevent the usage of a socket without
